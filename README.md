@@ -1,4 +1,4 @@
-# Spalvų NN — Android programėlė
+# Spalvų Atpažintojas
 
 ## Kas tai?
 Neuroninis tinklas realiame laike atpažįsta spalvas per telefono kamerą.
