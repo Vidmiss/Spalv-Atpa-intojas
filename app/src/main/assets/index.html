@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spalvų klasifikatorius — Neuroninio tinklo vizualizacija</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f5f3;
+    --card: #ffffff;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a18;
+    --muted: #6b6b67;
+    --hint: #9c9a92;
+    --radius: 12px;
+    --font: system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --card: #252523;
+      --border: rgba(255,255,255,0.1);
+      --text: #e8e6de;
+      --muted: #9c9a92;
+      --hint: #6b6b67;
+    }
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  #root {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    max-width: 860px;
+  }
+  #cam-panel { flex: 1; min-width: 0; }
+  #nn-panel { width: 320px; flex-shrink: 0; }
+
+  #video-wrap {
+    position: relative;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #111;
+    aspect-ratio: 4/3;
+  }
+  #video, #overlay-canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  #label-banner {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: 8px 12px;
+    background: rgba(0,0,0,0.65);
+    display: flex; justify-content: space-between; align-items: center;
+    backdrop-filter: blur(4px);
+  }
+  #main-label { font-size: 14px; font-weight: 500; color: #fff; }
+  #conf-bar-wrap { display: flex; align-items: center; gap: 6px; }
+  #conf-bar-bg {
+    width: 90px; height: 10px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 5px; overflow: hidden;
+  }
+  #conf-bar { height: 100%; width: 0%; border-radius: 5px; transition: width 0.1s, background 0.2s; }
+  #conf-pct { font-size: 11px; color: rgba(255,255,255,0.7); min-width: 36px; text-align: right; }
+
+  #start-btn {
+    display: block; width: 100%;
+    margin-top: 10px; padding: 9px;
+    font-size: 14px; font-weight: 500;
+    border-radius: var(--radius);
+    background: #185FA5; color: #fff;
+    border: none; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  #start-btn:hover { opacity: 0.85; }
+  #cam-footer {
+    font-size: 11px; color: var(--hint);
+    margin-top: 6px; text-align: center; min-height: 16px;
+  }
+
+  #nn-card {
+    background: var(--card);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  #nn-card h3 {
+    font-size: 12px; font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 12px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  #nn-svg-wrap svg { width: 100%; height: auto; display: block; }
+
+  .input-group {
+    display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  }
+  .swatch {
+    width: 22px; height: 22px; border-radius: 6px;
+    border: 0.5px solid var(--border); flex-shrink: 0;
+    background: #888;
+  }
+  .rgb-vals { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .pred-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 8px; font-size: 13px;
+    padding: 5px 8px; border-radius: 6px;
+    background: rgba(0,0,0,0.03);
+    transition: background 0.2s;
+  }
+  @media (prefers-color-scheme: dark) {
+    .pred-row { background: rgba(255,255,255,0.04); }
+  }
+  .pred-row.active { background: rgba(24,95,165,0.12); }
+  .pred-label { color: var(--muted); }
+  .pred-val { font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text); }
+  .pred-row.active .pred-val { color: #185FA5; }
+  @media (prefers-color-scheme: dark) {
+    .pred-row.active .pred-val { color: #60aaff; }
+  }
+
+  .legend {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 0.5px solid var(--border);
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 4px; border-radius: 2px; }
+
+  #grid-ctrl {
+    display: flex; gap: 8px; margin-top: 10px; align-items: center; justify-content: flex-end;
+  }
+  #grid-ctrl label { font-size: 12px; color: var(--muted); }
+  #grid-ctrl input { width: 80px; }
+
+  @media (max-width: 600px) {
+    #root { flex-direction: column; }
+    #nn-panel { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<h1>Spalvų klasifikatorius — Neuroninio tinklo vizualizacija</h1>
+<p class="subtitle">Realaus laiko kamera + NumPy stiliaus neuroninis tinklas, apmokytas naršyklėje</p>
+
+<div id="root">
+  <div id="cam-panel">
+    <div id="video-wrap">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay-canvas"></canvas>
+      <div id="label-banner">
+        <span id="main-label">—</span>
+        <div id="conf-bar-wrap">
+          <div id="conf-bar-bg"><div id="conf-bar"></div></div>
+          <span id="conf-pct">—</span>
+        </div>
+      </div>
+    </div>
+    <div id="grid-ctrl">
+      <label for="grid-range">Tinklelis: <span id="grid-label">8×6</span></label>
+      <input type="range" id="grid-range" min="2" max="16" value="8" step="2">
+    </div>
+    <button id="start-btn">Įjungti kamerą</button>
+    <div id="cam-footer">Apmokomas neuroninis tinklas…</div>
+  </div>
+
+  <div id="nn-panel">
+    <div id="nn-card">
+      <h3>Tinklo aktyvacijos</h3>
+      <div id="nn-svg-wrap"></div>
+      <div class="input-group">
+        <div class="swatch" id="swatch"></div>
+        <span class="rgb-vals" id="rgb-vals">R:— G:— B:—</span>
+      </div>
+      <div class="pred-row" id="pred-bw">
+        <span class="pred-label">WB</span>
+        <span class="pred-val" id="pv-bw">—</span>
+      </div>
+      <div class="pred-row" id="pred-col">
+        <span class="pred-label">RGBYP</span>
+        <span class="pred-val" id="pv-col">—</span>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#60aaff"></div>Teigiamas svoris</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff7864"></div>Neigiamas svoris</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Neural Network ───────────────────────────────────────────────────
+function mulberry32(a){
+  return ()=>{ a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296; };
+}
+function randn(rng){ let u=0,v=0;while(!u)u=rng();while(!v)v=rng();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function softmax(x){ const m=Math.max(...x),e=x.map(v=>Math.exp(v-m)),s=e.reduce((a,b)=>a+b,0);return e.map(v=>v/s); }
+function std3(r,g,b){ const m=(r+g+b)/3;return Math.sqrt(((r-m)**2+(g-m)**2+(b-m)**2)/3); }
+
+function trainNN(){
+  // Architecture: 3 → 6 → 4 → 2
+  const inp=3,h1=6,h2=4,out=2;
+  const rng=mulberry32(0);
+  const W1=Float64Array.from({length:inp*h1},()=>randn(rng)*Math.sqrt(2/inp));
+  const b1=new Float64Array(h1);
+  const W2=Float64Array.from({length:h1*h2},()=>randn(rng)*Math.sqrt(2/h1));
+  const b2=new Float64Array(h2);
+  const W3=Float64Array.from({length:h2*out},()=>randn(rng)*Math.sqrt(2/h2));
+  const b3=new Float64Array(out);
+
+  const N=2000;
+  const X=new Float64Array(N*3),y=new Uint8Array(N);
+  const rng2=mulberry32(42);
+  for(let i=0;i<N/2;i++){
+    const g=rng2()*256;
+    for(let c=0;c<3;c++){let v=(g+randn(rng2)*8)/255;X[i*3+c]=Math.max(0,Math.min(1,v));}
+  }
+  // General color samples (half of color set)
+  const colorStart = N/2;
+  const colorEnd   = N/2 + Math.floor(N/4);       // 500 general
+  for(let i=colorStart;i<colorEnd;i++){
+    let r,g,b;do{r=rng2()*256;g=rng2()*256;b=rng2()*256;}while(std3(r,g,b)<30);
+    X[i*3]=r/255;X[i*3+1]=g/255;X[i*3+2]=b/255;y[i]=1;
+  }
+  // Yellow-heavy samples (extra 250 — covers pure yellow, gold, lime-yellow, warm yellow)
+  const yellowEnd = colorEnd + Math.floor(N/8);   // 250 yellow
+  for(let i=colorEnd;i<yellowEnd;i++){
+    // R: 160-255, G: 130-255, B: 0-80, with R≈G >> B
+    const r=160+rng2()*95, g=130+rng2()*125, b=rng2()*80;
+    X[i*3]=r/255;X[i*3+1]=g/255;X[i*3+2]=b/255;y[i]=1;
+  }
+  // Remaining color samples (fill the rest)
+  for(let i=yellowEnd;i<N;i++){
+    let r,g,b;do{r=rng2()*256;g=rng2()*256;b=rng2()*256;}while(std3(r,g,b)<30);
+    X[i*3]=r/255;X[i*3+1]=g/255;X[i*3+2]=b/255;y[i]=1;
+  }
+  for(let i=N-1;i>0;i--){
+    const j=Math.floor(rng2()*i);
+    const t0=X[i*3],t1=X[i*3+1],t2=X[i*3+2],ty=y[i];
+    X[i*3]=X[j*3];X[i*3+1]=X[j*3+1];X[i*3+2]=X[j*3+2];y[i]=y[j];
+    X[j*3]=t0;X[j*3+1]=t1;X[j*3+2]=t2;y[j]=ty;
+  }
+
+  const lr=0.05,epochs=400,bs=64;
+  for(let ep=0;ep<epochs;ep++){
+    for(let s=0;s<N;s+=bs){
+      const nb=Math.min(bs,N-s);
+      const z1=new Float64Array(nb*h1),a1=new Float64Array(nb*h1);
+      const z2=new Float64Array(nb*h2),a2=new Float64Array(nb*h2);
+      const a3=new Float64Array(nb*out);
+      // forward
+      for(let i=0;i<nb;i++){
+        for(let j=0;j<h1;j++){
+          let v=b1[j];for(let k=0;k<inp;k++)v+=X[(s+i)*3+k]*W1[k*h1+j];
+          z1[i*h1+j]=v;a1[i*h1+j]=Math.max(0,v);
+        }
+        for(let j=0;j<h2;j++){
+          let v=b2[j];for(let k=0;k<h1;k++)v+=a1[i*h1+k]*W2[k*h2+j];
+          z2[i*h2+j]=v;a2[i*h2+j]=Math.max(0,v);
+        }
+        const raw=[];
+        for(let j=0;j<out;j++){let v=b3[j];for(let k=0;k<h2;k++)v+=a2[i*h2+k]*W3[k*out+j];raw.push(v);}
+        const sm=softmax(raw);for(let j=0;j<out;j++)a3[i*out+j]=sm[j];
+      }
+      // backward
+      for(let i=0;i<nb;i++){
+        // dL/dz3
+        const dz3=Array.from(a3.slice(i*out,(i+1)*out));
+        dz3[y[s+i]]-=1;for(let k=0;k<out;k++)dz3[k]/=nb;
+        for(let k=0;k<h2;k++)for(let j=0;j<out;j++)W3[k*out+j]-=lr*a2[i*h2+k]*dz3[j];
+        for(let j=0;j<out;j++)b3[j]-=lr*dz3[j];
+        // dL/dz2
+        for(let k=0;k<h2;k++){
+          let da=0;for(let j=0;j<out;j++)da+=W3[k*out+j]*dz3[j];
+          const dz=da*(z2[i*h2+k]>0?1:0);
+          for(let m=0;m<h1;m++)W2[m*h2+k]-=lr*a1[i*h1+m]*dz;
+          b2[k]-=lr*dz;
+          // dL/dz1
+          for(let m=0;m<h1;m++){
+            let da1=0;for(let jj=0;jj<h2;jj++){let dz2v=(z2[i*h2+jj]>0?1:0);let daTemp=0;for(let jk=0;jk<out;jk++)daTemp+=W3[jj*out+jk]*dz3[jk];da1+=W2[m*h2+jj]*daTemp*dz2v;}
+          }
+        }
+        // simpler clean dz1
+        for(let m=0;m<h1;m++){
+          let da1=0;
+          for(let jj=0;jj<h2;jj++){
+            const dz2v=(z2[i*h2+jj]>0?1:0);
+            let daTemp=0;for(let jk=0;jk<out;jk++)daTemp+=W3[jj*out+jk]*dz3[jk];
+            da1+=W2[m*h2+jj]*daTemp*dz2v;
+          }
+          const dz1v=da1*(z1[i*h1+m]>0?1:0);
+          for(let kk=0;kk<inp;kk++)W1[kk*h1+m]-=lr*X[(s+i)*3+kk]*dz1v;
+          b1[m]-=lr*dz1v;
+        }
+      }
+    }
+  }
+  return {W1,b1,W2,b2,W3,b3,inp,h1,h2,out};
+}
+
+function predict(nn,rgb){
+  const {W1,b1,W2,b2,W3,b3,inp,h1,h2,out}=nn;
+  // Layer 1
+  const z1=[],a1=[];
+  for(let j=0;j<h1;j++){
+    let v=b1[j];for(let k=0;k<inp;k++)v+=rgb[k]*W1[k*h1+j];
+    z1.push(v);a1.push(Math.max(0,v));
+  }
+  // Layer 2
+  const z2=[],a2=[];
+  for(let j=0;j<h2;j++){
+    let v=b2[j];for(let k=0;k<h1;k++)v+=a1[k]*W2[k*h2+j];
+    z2.push(v);a2.push(Math.max(0,v));
+  }
+  // Output
+  const raw=[];
+  for(let j=0;j<out;j++){let v=b3[j];for(let k=0;k<h2;k++)v+=a2[k]*W3[k*out+j];raw.push(v);}
+  return {probs:softmax(raw),z1,a1,z2,a2};
+}
+
+// ─── SVG Renderer ─────────────────────────────────────────────────────
+// showH2: boolean controlled externally (toggle button)
+let showH2Override = false; // user can force-show H2
+
+function buildSVG(nn, act) {
+  const {inp, h1, h2, out} = nn;
+  const ff = 'system-ui,sans-serif';
+  const lh = 'var(--hint,#9c9a92)';
+
+  const inActs  = act ? act.rgb : [0,0,0];
+  const h1Acts  = act ? act.a1  : new Array(h1).fill(0);
+  const h2Acts  = act ? act.a2  : new Array(h2).fill(0);
+  const h1Max   = Math.max(...h1Acts, 0.01);
+  const h2Max   = Math.max(...h2Acts, 0.01);
+  const probs   = act ? act.probs : [0.5, 0.5];
+
+  // H2 always visible
+  const h2Active = true;
+
+  const W = 320;
+  const H = 310;
+
+  // X positions
+  const lx = [28, 100, 188, 268];
+
+  // Vertical positions
+  const inY  = [60, 130, 200];                          // 3 inputs, centered in H=310
+  const h1Y  = [20, 68, 116, 164, 212, 260];            // 6 H1 nodes
+  const h2Y  = [50, 113, 176, 239];                     // 4 H2 nodes
+  const outY = [95, 200];                               // 2 outputs
+
+  const outX = lx[lx.length - 1];
+  const h2X  = h2Active ? lx[2] : null;
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block">`;
+
+  // ── Layer labels ──
+  s += `<text x="${lx[0]}" y="13" text-anchor="middle" font-size="9" fill="${lh}" font-family="${ff}">Įvestis</text>`;
+  s += `<text x="${lx[1]}" y="13" text-anchor="middle" font-size="9" fill="${lh}" font-family="${ff}">Paslėptas 1</text>`;
+  s += `<text x="${lx[2]}" y="13" text-anchor="middle" font-size="9" fill="${lh}" font-family="${ff}">Paslėptas 2</text>`;
+  s += `<text x="${outX}" y="13" text-anchor="middle" font-size="9" fill="${lh}" font-family="${ff}">Išvestis</text>`;
+
+  // ── Edges: inp → h1 ──
+  for (let i = 0; i < inp; i++) for (let j = 0; j < h1; j++) {
+    const w = nn.W1[i*h1+j], str = Math.min(Math.abs(w)/3, 1), alpha = 0.05 + str*0.38;
+    const col = w > 0 ? `rgba(96,170,255,${alpha})` : `rgba(255,100,80,${alpha})`;
+    s += `<line x1="${lx[0]}" y1="${inY[i]}" x2="${lx[1]}" y2="${h1Y[j]}" stroke="${col}" stroke-width="${(0.4+str*1.4).toFixed(2)}"/>`;
+  }
+
+  if (h2Active) {
+    // ── Edges: h1 → h2 ──
+    for (let i = 0; i < h1; i++) for (let j = 0; j < h2; j++) {
+      const w = nn.W2[i*h2+j], str = Math.min(Math.abs(w)/3, 1), alpha = 0.05 + str*0.36;
+      const col = w > 0 ? `rgba(96,170,255,${alpha})` : `rgba(255,100,80,${alpha})`;
+      s += `<line x1="${lx[1]}" y1="${h1Y[i]}" x2="${lx[2]}" y2="${h2Y[j]}" stroke="${col}" stroke-width="${(0.4+str*1.3).toFixed(2)}"/>`;
+    }
+    // ── Edges: h2 → out ──
+    for (let i = 0; i < h2; i++) for (let k = 0; k < out; k++) {
+      const w = nn.W3[i*out+k], str = Math.min(Math.abs(w)/3, 1), alpha = 0.07 + str*0.45;
+      const col = w > 0 ? `rgba(96,170,255,${alpha})` : `rgba(255,100,80,${alpha})`;
+      s += `<line x1="${lx[2]}" y1="${h2Y[i]}" x2="${outX}" y2="${outY[k]}" stroke="${col}" stroke-width="${(0.5+str*1.5).toFixed(2)}"/>`;
+    }
+  }
+
+  // ── Input nodes: B(top), R(middle), G(bottom) — matching drawing ──
+  const icols  = ['hsl(210,65%,55%)', 'hsl(0,65%,52%)', 'hsl(120,48%,38%)'];
+  const iLabels = ['B','R','G'];
+  // inActs order stays [R,G,B] from rgb array, remap to display order [B,R,G]
+  const iActsDisplay = [inActs[2], inActs[0], inActs[1]];
+  for (let i = 0; i < inp; i++) {
+    const a = act ? 0.25 + iActsDisplay[i]*0.7 : 0.38;
+    s += `<circle cx="${lx[0]}" cy="${inY[i]}" r="13" fill="${icols[i]}" fill-opacity="${a.toFixed(2)}" stroke="${icols[i]}" stroke-width="1.5" stroke-opacity="0.9"/>`;
+    s += `<text x="${lx[0]}" y="${inY[i]+4}" text-anchor="middle" font-size="11" font-weight="600" fill="white" font-family="${ff}">${iLabels[i]}</text>`;
+  }
+
+  // ── Hidden layer 1: 6 nodes — blue, purple, red, orange, yellow, green ──
+  const h1Cols = ['hsl(210,65%,55%)', 'hsl(270,55%,55%)', 'hsl(0,65%,52%)', 'hsl(25,90%,52%)', 'hsl(46,88%,52%)', 'hsl(100,48%,40%)'];
+  for (let j = 0; j < h1; j++) {
+    const a = act ? (0.18 + 0.78*(h1Acts[j]/h1Max)) : 0.28;
+    const c = h1Cols[j];
+    s += `<circle cx="${lx[1]}" cy="${h1Y[j]}" r="10" fill="${c}" fill-opacity="${(0.22+a*0.68).toFixed(2)}" stroke="${c}" stroke-width="1.3" stroke-opacity="${(0.45+a*0.45).toFixed(2)}"/>`;
+  }
+
+  // ── Hidden layer 2: dark/black nodes ──
+  if (h2Active) {
+    for (let j = 0; j < h2; j++) {
+      const a = act ? (0.25 + 0.65*(h2Acts[j]/h2Max)) : 0.35;
+      s += `<circle cx="${lx[2]}" cy="${h2Y[j]}" r="9" fill="rgba(20,20,20,${a.toFixed(2)})" stroke="rgba(80,80,80,0.7)" stroke-width="1.1"/>`;
+    }
+  }
+
+  // ── Output nodes ──
+  const outLabels  = ['WB', 'RGBYP'];
+  const outBaseCols = ['rgba(160,160,155', 'rgba(96,170,255'];
+  for (let k = 0; k < out; k++) {
+    const p = probs[k], r = 14 + p*6;
+    s += `<circle cx="${outX}" cy="${outY[k]}" r="${r.toFixed(1)}" fill="${outBaseCols[k]},${(0.15+p*0.7).toFixed(2)})" stroke="${outBaseCols[k]},0.85)" stroke-width="1.5"/>`;
+    s += `<text x="${outX}" y="${outY[k]+4}" text-anchor="middle" font-size="10" font-weight="600" fill="var(--text,#1a1a18)" font-family="${ff}">${outLabels[k]}</text>`;
+    s += `<text x="${outX}" y="${outY[k]+r+13}" text-anchor="middle" font-size="10" fill="var(--muted,#6b6b67)" font-family="${ff}">${(p*100).toFixed(1)}%</text>`;
+  }
+
+  s += `</svg>`;
+  return s;
+}
+
+// Helper: given normalized r,g,b → classify dominant color name and overlay rgba
+function classifyColor(rn, gn, bn) {
+  const {probs} = predict(nn, [rn, gn, bn]);
+  const isCol = probs[1] > probs[0];
+  if (!isCol) {
+    const v = Math.round(140 * probs[0]);
+    return { isCol: false, fill: `rgba(${v},${v},${v},0.30)`, border: `rgba(200,200,200,0.5)` };
+  }
+  // Convert to HSV hue to pick color bucket
+  const r8 = rn, g8 = gn, b8 = bn;
+  const max = Math.max(r8, g8, b8), min = Math.min(r8, g8, b8), d = max - min;
+  let hue = 0;
+  if (d > 0.01) {
+    if (max === r8)      hue = 60 * (((g8 - b8) / d) % 6);
+    else if (max === g8) hue = 60 * ((b8 - r8) / d + 2);
+    else                 hue = 60 * ((r8 - g8) / d + 4);
+    if (hue < 0) hue += 360;
+  }
+  const sat = max < 0.01 ? 0 : d / max;
+  // Low saturation = white/grey even if NN said color
+  // Yellow has naturally lower perceived saturation — use a lower threshold for yellow hues
+  const isYellowHue = (hue >= 35 && hue < 80);
+  const satThreshold = isYellowHue ? 0.10 : 0.18;
+  const dThreshold   = isYellowHue ? 0.05 : 0.08;
+  if (sat < satThreshold || d < dThreshold) {
+    const v = Math.round(140 * probs[0]);
+    return { isCol: false, fill: `rgba(${v},${v},${v},0.28)`, border: `rgba(200,200,200,0.5)` };
+  }
+  // Hue buckets
+  let fill, border;
+  const conf = probs[1];
+  if (hue < 20 || hue >= 340)       { fill=`rgba(220,50,50,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(220,60,60,0.75)`;  } // Red
+  else if (hue < 35)                { fill=`rgba(210,90,20,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(210,90,20,0.75)`;  } // Orange
+  else if (hue < 80)                { fill=`rgba(220,195,0,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(220,195,0,0.85)`;  } // Yellow (wider: 35–80°)
+  else if (hue < 165)               { fill=`rgba(40,170,60,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(40,170,60,0.75)`;  } // Green
+  else if (hue < 195)               { fill=`rgba(0,190,200,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(0,190,200,0.75)`;  } // Cyan
+  else if (hue < 260)               { fill=`rgba(50,100,220,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(60,110,220,0.75)`;  } // Blue
+  else if (hue < 310)               { fill=`rgba(140,50,200,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(140,50,200,0.75)`;  } // Purple
+  else                               { fill=`rgba(200,50,120,${(0.25+conf*0.25).toFixed(2)})`;  border=`rgba(200,50,120,0.75)`;  } // Pink/Magenta
+  return { isCol: true, fill, border };
+}
+
+// ─── Grid overlay ─────────────────────────────────────────────────────
+function analyzeGrid(frame,cols,rows,nn,ctx){
+  const h=frame.height,w=frame.width;
+  const cw=Math.floor(w/cols),ch=Math.floor(h/rows);
+  let colorCount=0,bwCount=0;
+  let centerR=0,centerG=0,centerB=0;
+  const cx=Math.floor(cols/2),cy=Math.floor(rows/2);
+
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x1=c*cw,y1=r*ch;
+      const cell=ctx.getImageData(x1,y1,cw,ch);
+      let rs=0,gs=0,bs=0,n=0;
+      for(let i=0;i<cell.data.length;i+=4){rs+=cell.data[i];gs+=cell.data[i+1];bs+=cell.data[i+2];n++;}
+      const rn=rs/n/255,gn=gs/n/255,bn=bs/n/255;
+      const {isCol, fill, border} = classifyColor(rn, gn, bn);
+      if(isCol)colorCount++;else bwCount++;
+
+      if(r===cy&&c===cx){centerR=rn;centerG=gn;centerB=bn;}
+
+      ctx.fillStyle = fill;
+      ctx.fillRect(x1,y1,cw,ch);
+      ctx.strokeStyle = border;
+      ctx.lineWidth=0.8;
+      ctx.strokeRect(x1,y1,cw,ch);
+    }
+  }
+  return {colorCount,bwCount,total:cols*rows,centerR,centerG,centerB};
+}
+
+// ─── App ──────────────────────────────────────────────────────────────
+let nn=null,stream=null,animId=null,gridCols=8,gridRows=6;
+
+const video=document.getElementById('video');
+const oc=document.getElementById('overlay-canvas');
+const ctx2=oc.getContext('2d');
+const startBtn=document.getElementById('start-btn');
+const footer=document.getElementById('cam-footer');
+const nnWrap=document.getElementById('nn-svg-wrap');
+const mainLabel=document.getElementById('main-label');
+const confBar=document.getElementById('conf-bar');
+const confPct=document.getElementById('conf-pct');
+const swatchEl=document.getElementById('swatch');
+const rgbVals=document.getElementById('rgb-vals');
+const pvBW=document.getElementById('pv-bw');
+const pvCol=document.getElementById('pv-col');
+const predBW=document.getElementById('pred-bw');
+const predCol=document.getElementById('pred-col');
+const gridRange=document.getElementById('grid-range');
+const gridLabel=document.getElementById('grid-label');
+
+
+// train on load
+setTimeout(()=>{
+  nn=trainNN();
+  nnWrap.innerHTML=buildSVG(nn,null);
+  footer.textContent='Paruošta — paspauskite „Įjungti kamerą".';
+},20);
+
+gridRange.addEventListener('input',()=>{
+  gridCols=parseInt(gridRange.value);
+  gridRows=Math.round(gridCols*0.75);
+  gridLabel.textContent=`${gridCols}×${gridRows}`;
+});
+
+startBtn.addEventListener('click',async()=>{
+  if(stream){stopCam();return;}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480},audio:false});
+    video.srcObject=stream; video.play();
+    startBtn.textContent='Išjungti kamerą';
+    footer.textContent='Veikia…';
+    video.addEventListener('loadedmetadata',()=>{ oc.width=video.videoWidth; oc.height=video.videoHeight; loop(); },{once:true});
+  }catch(e){ footer.textContent='Kamera nepasiekiama arba prieiga uždrausta.'; }
+});
+
+function stopCam(){
+  if(animId){cancelAnimationFrame(animId);animId=null;}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  video.srcObject=null;
+  startBtn.textContent='Įjungti kamerą';
+  footer.textContent='Kamera išjungta.';
+  ctx2.clearRect(0,0,oc.width,oc.height);
+}
+
+let lastT=0;
+function loop(){
+  animId=requestAnimationFrame(loop);
+  const now=performance.now();
+  if(now-lastT<80)return;
+  lastT=now;
+  const vw=video.videoWidth,vh=video.videoHeight;
+  if(!vw||!vh)return;
+  oc.width=vw; oc.height=vh;
+
+  // Draw video (mirrored)
+  ctx2.save(); ctx2.scale(-1,1); ctx2.drawImage(video,-vw,0,vw,vh); ctx2.restore();
+
+  const {colorCount,bwCount,total,centerR,centerG,centerB}=analyzeGrid(
+    {width:vw,height:vh},gridCols,gridRows,nn,ctx2);
+
+  const isColor=colorCount>bwCount;
+  const conf=isColor?colorCount/total:bwCount/total;
+  const pct=Math.round(conf*100);
+
+  mainLabel.textContent=isColor?'RGBYP (Spalvota)':'WB (Juodai balta)';
+  mainLabel.style.color=isColor?'#60aaff':'#ddd';
+  confBar.style.width=pct+'%';
+  confBar.style.background=isColor?'#60aaff':'#bbb';
+  confPct.textContent=pct+'%';
+
+  // Center cell for NN display
+  const rgb=[centerR,centerG,centerB];
+  const {probs,z1,a1,z2,a2}=predict(nn,rgb);
+  const r8=Math.round(centerR*255),g8=Math.round(centerG*255),b8=Math.round(centerB*255);
+  swatchEl.style.background=`rgb(${r8},${g8},${b8})`;
+  rgbVals.textContent=`R:${r8} G:${g8} B:${b8}`;
+  pvBW.textContent=Math.round(bwCount/total*100)+'%';
+  pvCol.textContent=Math.round(colorCount/total*100)+'%';
+  predBW.classList.toggle('active',!isColor);
+  predCol.classList.toggle('active',isColor);
+
+  nnWrap.innerHTML=buildSVG(nn,{rgb,a1,z1,a2,z2,probs});
+}
+
+// ─── Screenshot ───────────────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(e.key==='s'||e.key==='S'){
+    const a=document.createElement('a');
+    a.download=`color_nn_${Date.now()}.png`;
+    a.href=oc.toDataURL();
+    a.click();
+  }
+});
+</script>
+</body>
+</html>
