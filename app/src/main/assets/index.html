@@ -1,63 +1,45 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="lt">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spalvų klasifikatorius — Neuroninio tinklo vizualizacija</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Spalvų NN</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #f5f5f3;
-    --card: #ffffff;
-    --border: rgba(0,0,0,0.1);
-    --text: #1a1a18;
-    --muted: #6b6b67;
-    --hint: #9c9a92;
-    --radius: 12px;
+    --bg: #111113;
+    --card: #1c1c1f;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8e6de;
+    --muted: #9c9a92;
+    --hint: #6b6b67;
+    --blue: #3a8eff;
+    --radius: 14px;
     --font: system-ui, -apple-system, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1a1a18;
-      --card: #252523;
-      --border: rgba(255,255,255,0.1);
-      --text: #e8e6de;
-      --muted: #9c9a92;
-      --hint: #6b6b67;
-    }
-  }
-  body {
+  html, body {
+    height: 100%; width: 100%;
     background: var(--bg);
     color: var(--text);
     font-family: var(--font);
-    min-height: 100vh;
-    padding: 24px 16px;
-  }
-  h1 {
-    font-size: 18px;
-    font-weight: 500;
-    margin-bottom: 4px;
-  }
-  .subtitle {
-    font-size: 13px;
-    color: var(--muted);
-    margin-bottom: 20px;
-  }
-  #root {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-    max-width: 860px;
-  }
-  #cam-panel { flex: 1; min-width: 0; }
-  #nn-panel { width: 320px; flex-shrink: 0; }
-
-  #video-wrap {
-    position: relative;
-    border-radius: var(--radius);
     overflow: hidden;
-    background: #111;
-    aspect-ratio: 4/3;
+  }
+
+  /* ── Layout: 3 rows ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    width: 100%;
+  }
+
+  /* ── Camera (top, fills available space) ── */
+  #cam-section {
+    flex: 1 1 0;
+    min-height: 0;
+    position: relative;
+    background: #000;
+    overflow: hidden;
   }
   #video, #overlay-canvas {
     position: absolute; inset: 0;
@@ -66,147 +48,176 @@
   }
   #label-banner {
     position: absolute; top: 0; left: 0; right: 0;
-    padding: 8px 12px;
-    background: rgba(0,0,0,0.65);
+    padding: 10px 14px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
     display: flex; justify-content: space-between; align-items: center;
-    backdrop-filter: blur(4px);
   }
-  #main-label { font-size: 14px; font-weight: 500; color: #fff; }
+  #main-label { font-size: 15px; font-weight: 600; color: #fff; letter-spacing: 0.02em; }
   #conf-bar-wrap { display: flex; align-items: center; gap: 6px; }
   #conf-bar-bg {
-    width: 90px; height: 10px;
+    width: 80px; height: 8px;
     background: rgba(255,255,255,0.2);
-    border-radius: 5px; overflow: hidden;
+    border-radius: 4px; overflow: hidden;
   }
-  #conf-bar { height: 100%; width: 0%; border-radius: 5px; transition: width 0.1s, background 0.2s; }
-  #conf-pct { font-size: 11px; color: rgba(255,255,255,0.7); min-width: 36px; text-align: right; }
+  #conf-bar { height: 100%; width: 0%; border-radius: 4px; transition: width 0.1s, background 0.2s; }
+  #conf-pct { font-size: 12px; color: rgba(255,255,255,0.8); min-width: 38px; text-align: right; font-weight: 500; }
 
+  /* Flip camera button */
+  #flip-btn {
+    position: absolute; bottom: 12px; right: 12px;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff; font-size: 22px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #flip-btn:active { background: rgba(58,142,255,0.5); }
+
+  /* ── Controls (middle, fixed height) ── */
+  #ctrl-section {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    background: var(--card);
+    border-top: 0.5px solid var(--border);
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
   #start-btn {
-    display: block; width: 100%;
-    margin-top: 10px; padding: 9px;
-    font-size: 14px; font-weight: 500;
-    border-radius: var(--radius);
-    background: #185FA5; color: #fff;
+    flex: 1;
+    padding: 10px;
+    font-size: 14px; font-weight: 600;
+    border-radius: 10px;
+    background: var(--blue); color: #fff;
     border: none; cursor: pointer;
     transition: opacity 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
-  #start-btn:hover { opacity: 0.85; }
-  #cam-footer {
-    font-size: 11px; color: var(--hint);
-    margin-top: 6px; text-align: center; min-height: 16px;
+  #start-btn:active { opacity: 0.8; }
+  #grid-ctrl {
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
   }
+  #grid-ctrl label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #grid-range { width: 70px; accent-color: var(--blue); }
+  #cam-footer { font-size: 11px; color: var(--hint); white-space: nowrap; }
 
-  #nn-card {
+  /* ── NN panel (bottom, fixed height) ── */
+  #nn-section {
+    flex: 0 0 auto;
     background: var(--card);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px;
+    padding: 10px 14px 12px;
+    overflow-y: auto;
   }
-  #nn-card h3 {
-    font-size: 12px; font-weight: 500;
-    color: var(--muted);
-    margin-bottom: 12px;
-    text-transform: uppercase; letter-spacing: 0.05em;
+  #nn-inner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  #nn-svg-wrap {
+    flex: 1 1 0;
+    min-width: 0;
   }
   #nn-svg-wrap svg { width: 100%; height: auto; display: block; }
 
+  #nn-stats {
+    flex: 0 0 130px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+  }
   .input-group {
-    display: flex; align-items: center; gap: 8px; margin-top: 12px;
+    display: flex; align-items: center; gap: 6px;
   }
   .swatch {
-    width: 22px; height: 22px; border-radius: 6px;
+    width: 20px; height: 20px; border-radius: 5px;
     border: 0.5px solid var(--border); flex-shrink: 0;
     background: #888;
   }
-  .rgb-vals { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-
+  .rgb-vals { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .pred-row {
     display: flex; justify-content: space-between; align-items: center;
-    margin-top: 8px; font-size: 13px;
-    padding: 5px 8px; border-radius: 6px;
-    background: rgba(0,0,0,0.03);
+    font-size: 12px;
+    padding: 5px 8px; border-radius: 7px;
+    background: rgba(255,255,255,0.04);
     transition: background 0.2s;
   }
-  @media (prefers-color-scheme: dark) {
-    .pred-row { background: rgba(255,255,255,0.04); }
-  }
-  .pred-row.active { background: rgba(24,95,165,0.12); }
+  .pred-row.active { background: rgba(58,142,255,0.15); }
   .pred-label { color: var(--muted); }
-  .pred-val { font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text); }
-  .pred-row.active .pred-val { color: #185FA5; }
-  @media (prefers-color-scheme: dark) {
-    .pred-row.active .pred-val { color: #60aaff; }
-  }
-
+  .pred-val { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+  .pred-row.active .pred-val { color: var(--blue); }
   .legend {
-    margin-top: 12px; padding-top: 10px;
-    border-top: 0.5px solid var(--border);
-    display: flex; gap: 12px; flex-wrap: wrap;
+    display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px;
   }
-  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
-  .legend-dot { width: 10px; height: 4px; border-radius: 2px; }
-
-  #grid-ctrl {
-    display: flex; gap: 8px; margin-top: 10px; align-items: center; justify-content: flex-end;
-  }
-  #grid-ctrl label { font-size: 12px; color: var(--muted); }
-  #grid-ctrl input { width: 80px; }
-
-  @media (max-width: 600px) {
-    #root { flex-direction: column; }
-    #nn-panel { width: 100%; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--hint); }
+  .legend-dot { width: 10px; height: 3px; border-radius: 2px; }
+  #nn-title {
+    font-size: 10px; font-weight: 500; color: var(--hint);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 6px;
   }
 </style>
 </head>
 <body>
-<h1>Spalvų klasifikatorius — Neuroninio tinklo vizualizacija</h1>
-<p class="subtitle">Realaus laiko kamera + NumPy stiliaus neuroninis tinklas, apmokytas naršyklėje</p>
+<div id="app">
 
-<div id="root">
-  <div id="cam-panel">
-    <div id="video-wrap">
-      <video id="video" autoplay muted playsinline></video>
-      <canvas id="overlay-canvas"></canvas>
-      <div id="label-banner">
-        <span id="main-label">—</span>
-        <div id="conf-bar-wrap">
-          <div id="conf-bar-bg"><div id="conf-bar"></div></div>
-          <span id="conf-pct">—</span>
+  <!-- CAMERA -->
+  <div id="cam-section">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="overlay-canvas"></canvas>
+    <div id="label-banner">
+      <span id="main-label">—</span>
+      <div id="conf-bar-wrap">
+        <div id="conf-bar-bg"><div id="conf-bar"></div></div>
+        <span id="conf-pct">—</span>
+      </div>
+    </div>
+    <button id="flip-btn" title="Keisti kamerą">⟳</button>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="ctrl-section">
+    <button id="start-btn">Įjungti kamerą</button>
+    <div id="grid-ctrl">
+      <label for="grid-range">Tinklelis: <span id="grid-label">16×12</span></label>
+      <input type="range" id="grid-range" min="2" max="16" value="16" step="2">
+    </div>
+    <span id="cam-footer">Veikia…</span>
+  </div>
+
+  <!-- NEURAL NETWORK -->
+  <div id="nn-section">
+    <div id="nn-title">Tinklo aktyvacijos</div>
+    <div id="nn-inner">
+      <div id="nn-svg-wrap"></div>
+      <div id="nn-stats">
+        <div class="input-group">
+          <div class="swatch" id="swatch"></div>
+          <span class="rgb-vals" id="rgb-vals">R:— G:— B:—</span>
+        </div>
+        <div class="pred-row" id="pred-bw">
+          <span class="pred-label">WB</span>
+          <span class="pred-val" id="pv-bw">—</span>
+        </div>
+        <div class="pred-row" id="pred-col">
+          <span class="pred-label">RGBYP</span>
+          <span class="pred-val" id="pv-col">—</span>
+        </div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#3a8eff"></div>Teigiamas</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#ff7864"></div>Neigiamas</div>
         </div>
       </div>
     </div>
-    <div id="grid-ctrl">
-      <label for="grid-range">Tinklelis: <span id="grid-label">8×6</span></label>
-      <input type="range" id="grid-range" min="2" max="16" value="8" step="2">
-    </div>
-    <button id="start-btn">Įjungti kamerą</button>
-    <div id="cam-footer">Apmokomas neuroninis tinklas…</div>
   </div>
 
-  <div id="nn-panel">
-    <div id="nn-card">
-      <h3>Tinklo aktyvacijos</h3>
-      <div id="nn-svg-wrap"></div>
-      <div class="input-group">
-        <div class="swatch" id="swatch"></div>
-        <span class="rgb-vals" id="rgb-vals">R:— G:— B:—</span>
-      </div>
-      <div class="pred-row" id="pred-bw">
-        <span class="pred-label">WB</span>
-        <span class="pred-val" id="pv-bw">—</span>
-      </div>
-      <div class="pred-row" id="pred-col">
-        <span class="pred-label">RGBYP</span>
-        <span class="pred-val" id="pv-col">—</span>
-      </div>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#60aaff"></div>Teigiamas svoris</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#ff7864"></div>Neigiamas svoris</div>
-      </div>
-    </div>
-  </div>
 </div>
-
 <script>
 // ─── Neural Network ───────────────────────────────────────────────────
 function mulberry32(a){
@@ -517,12 +528,14 @@ function analyzeGrid(frame,cols,rows,nn,ctx){
 }
 
 // ─── App ──────────────────────────────────────────────────────────────
-let nn=null,stream=null,animId=null,gridCols=8,gridRows=6;
+let nn=null,stream=null,animId=null,gridCols=16,gridRows=12;
+let facingMode = 'environment'; // start with back camera
 
 const video=document.getElementById('video');
 const oc=document.getElementById('overlay-canvas');
 const ctx2=oc.getContext('2d');
 const startBtn=document.getElementById('start-btn');
+const flipBtn=document.getElementById('flip-btn');
 const footer=document.getElementById('cam-footer');
 const nnWrap=document.getElementById('nn-svg-wrap');
 const mainLabel=document.getElementById('main-label');
@@ -537,7 +550,6 @@ const predCol=document.getElementById('pred-col');
 const gridRange=document.getElementById('grid-range');
 const gridLabel=document.getElementById('grid-label');
 
-
 // train on load
 setTimeout(()=>{
   nn=trainNN();
@@ -551,15 +563,30 @@ gridRange.addEventListener('input',()=>{
   gridLabel.textContent=`${gridCols}×${gridRows}`;
 });
 
-startBtn.addEventListener('click',async()=>{
-  if(stream){stopCam();return;}
+async function startCam(){
   try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480},audio:false});
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode, width:{ideal:1280}, height:{ideal:960} },
+      audio:false
+    });
     video.srcObject=stream; video.play();
     startBtn.textContent='Išjungti kamerą';
     footer.textContent='Veikia…';
     video.addEventListener('loadedmetadata',()=>{ oc.width=video.videoWidth; oc.height=video.videoHeight; loop(); },{once:true});
   }catch(e){ footer.textContent='Kamera nepasiekiama arba prieiga uždrausta.'; }
+}
+
+startBtn.addEventListener('click',async()=>{
+  if(stream){stopCam();return;}
+  await startCam();
+});
+
+flipBtn.addEventListener('click', async()=>{
+  facingMode = facingMode==='environment' ? 'user' : 'environment';
+  if(stream){
+    stopCam();
+    await startCam();
+  }
 });
 
 function stopCam(){
@@ -581,8 +608,11 @@ function loop(){
   if(!vw||!vh)return;
   oc.width=vw; oc.height=vh;
 
-  // Draw video (mirrored)
-  ctx2.save(); ctx2.scale(-1,1); ctx2.drawImage(video,-vw,0,vw,vh); ctx2.restore();
+  // Draw video (mirrored only for front camera)
+  ctx2.save();
+  if(facingMode==='user'){ ctx2.scale(-1,1); ctx2.drawImage(video,-vw,0,vw,vh); }
+  else { ctx2.drawImage(video,0,0,vw,vh); }
+  ctx2.restore();
 
   const {colorCount,bwCount,total,centerR,centerG,centerB}=analyzeGrid(
     {width:vw,height:vh},gridCols,gridRows,nn,ctx2);
@@ -592,12 +622,11 @@ function loop(){
   const pct=Math.round(conf*100);
 
   mainLabel.textContent=isColor?'RGBYP (Spalvota)':'WB (Juodai balta)';
-  mainLabel.style.color=isColor?'#60aaff':'#ddd';
+  mainLabel.style.color=isColor?'#3a8eff':'#ddd';
   confBar.style.width=pct+'%';
-  confBar.style.background=isColor?'#60aaff':'#bbb';
+  confBar.style.background=isColor?'#3a8eff':'#bbb';
   confPct.textContent=pct+'%';
 
-  // Center cell for NN display
   const rgb=[centerR,centerG,centerB];
   const {probs,z1,a1,z2,a2}=predict(nn,rgb);
   const r8=Math.round(centerR*255),g8=Math.round(centerG*255),b8=Math.round(centerB*255);
