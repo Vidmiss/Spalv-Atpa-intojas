@@ -1,2 +1,1 @@
-###### NEBEIGTAS PROJEKTAS
-###### KOL KAS NIEKO NĖRA
+# DI atpažystantis spalvas, neuroninio tinklo vizualizacija
